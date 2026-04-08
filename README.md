@@ -12,7 +12,8 @@ The AGL MyAccount dashboard provides raw usage data but often lacks a dynamic su
 - **📊 Supply Charge Integration**: Factors in the daily supply charge based on the current billing period.
 - **🎁 Gift Card Tiers**: Automatically calculates your eligible gift card reward based on solar export kWh.
 - **📈 Quarter Forecast**: Provides a linear projection of your end-of-bill costs and revenues.
-- **🌗 Dark Mode UI**: A sleek, modern floating panel that matches a premium aesthetic.
+- **🌑 Dark Mode UI**: A sleek, modern floating panel that matches a premium aesthetic.
+- **Toggleable Adjustments**: Click the Feed-in row to expand a breakdown of solar export exclusions for export outside the reward window.
 - **📋 Tariff Reference**: A built-in, collapsible reference for your specific plan rates (TOU & CL31).
 
 ## How to Install
@@ -44,6 +45,7 @@ const SHOULDER_RATE_CENTS_PER_KWH = 19.998;
 const OFFPEAK_RATE_CENTS_PER_KWH = 19.998;
 const CL31_RATE_CENTS_PER_KWH = 17.666;
 const SOLAR_FIT_CENTS_PER_KWH = 3;
+const DAILY_EXPORT_EXCLUDE_KWH = 1.5; // kWh/day to subtract from solar export (e.g. non-VPP window)
 const GIFT_CARD_TIERS = [ ... ];
 ```
 

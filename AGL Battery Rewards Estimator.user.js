@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGL Battery Rewards Estimator
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Calculates electricity cost, FiT revenue, and net cost from AGL usage page
 // @author       jia11-501ng
 // @match        https://myaccount.agl.com.au/*
@@ -24,6 +24,10 @@
   const CL31_RATE_CENTS_PER_KWH = 17.666;       // c/kWh
   const CL31_SUPPLY_CENTS_PER_DAY = 0;          // c/day
   const SOLAR_FIT_CENTS_PER_KWH = 3;            // c/kWh
+
+  // Adjustments for non-eligible usage/export
+  // Use these to exclude specific amounts from the daily calculations (e.g. export outside reward window)
+  const DAILY_EXPORT_EXCLUDE_KWH = 1.5;         // kWh to subtract from daily export
 
   // Feed-in tariff logic:
   // The page already shows the $ credit AGL gives.
@@ -247,11 +251,12 @@
       fcstTotalRevenueDollars,
       fcstNetCostDollars,
       warnings,
+      pageData,
     } = data;
 
     const isProfit = netCostDollars !== null && netCostDollars <= 0;
     const netClass = netCostDollars !== null ? (isProfit ? 'profit' : 'loss') : '';
-    const netLabel = netCostDollars !== null ? (isProfit ? '🤭 Credit' : '😟 Owning') : '—';
+    const netLabel = netCostDollars !== null ? (isProfit ? '🤭 Estimated Credit' : '😟 Estimated Owning') : '—';
     const netFormatted = netCostDollars !== null
       ? (isProfit ? '+$' : '-$') + Math.abs(netCostDollars).toFixed(2)
       : 'N/A';
@@ -289,7 +294,8 @@
     flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
     padding:11px 14px 9px;border-bottom:1px solid rgba(255,255,255,.14);
   }
-  #agl-calc-panel .ap-hdr-title{font-size:13px;font-weight:700;letter-spacing:.4px;color:#7feff6}
+  #agl-calc-panel .ap-hdr-title{font-size:13px;font-weight:700;letter-spacing:.4px;color:#7feff6;cursor:pointer;transition:opacity .15s}
+  #agl-calc-panel .ap-hdr-title:hover{opacity:.8}
   #agl-calc-panel .ap-hdr-sub{font-size:10px;color:rgba(255,255,255,.5);margin-top:1px}
   #agl-calc-panel .ap-hdr-btns{display:flex;align-items:center;gap:4px}
   #agl-calc-panel .ap-close,#agl-calc-panel .ap-toggle{
@@ -399,6 +405,12 @@
   #agl-calc-panel .ap-tariff-lbl small{display:block;font-size:8px;color:rgba(255,255,255,.2);line-height:1.3}
   #agl-calc-panel .ap-tariff-val{font-size:9px;font-weight:600;color:rgba(255,255,255,.5);text-align:right;white-space:nowrap;line-height:1.7}
   #agl-calc-panel .ap-tariff-sep{grid-column:1/-1;border:none;border-top:1px solid rgba(255,255,255,.06);margin:2px 0}
+  #agl-calc-panel .ap-fit-ctrl{cursor:pointer;border-radius:8px;transition:background .2s;margin:0 -4px;padding:0 4px}
+  #agl-calc-panel .ap-fit-ctrl:hover{background:rgba(255,255,255,.05)}
+  #agl-calc-panel .ap-fit-adj{max-height:0;overflow:hidden;transition:all .25s ease;opacity:0}
+  #agl-calc-panel .ap-fit-ctrl.open .ap-fit-adj{max-height:40px;opacity:1;padding-bottom:4px}
+  #agl-calc-panel .ap-fit-chevron{display:inline-block;transition:transform .22s;font-size:8px;opacity:0.3;vertical-align:middle;margin-top:-2px}
+  #agl-calc-panel .ap-fit-ctrl.open .ap-fit-chevron{transform:rotate(180deg)}
 </style>
 
 <div class="ap-hdr">
@@ -425,7 +437,7 @@
         <span class="ap-row-val">${fmt(boughtDollars)}</span>
       </div>
       <div class="ap-row">
-        <span class="ap-row-lbl">Supply<small>${daysElapsed !== null ? daysElapsed + 'd × 160.655c' : '—'}</small></span>
+        <span class="ap-row-lbl">Supply<small>${daysElapsed !== null ? daysElapsed + 'd × ' + SUPPLY_CHARGE_CENTS_PER_DAY + 'c' : '—'}</small></span>
         <span class="ap-row-val">${fmt(supplyChargeDollars)}</span>
       </div>
       <div class="ap-divider"></div>
@@ -437,17 +449,29 @@
 
     <div class="ap-pane">
       <div class="ap-pane-title">☀️ Revenue</div>
-      <div class="ap-row">
-        <span class="ap-row-lbl">Feed-in<small>${fmtKwh(soldKwh)}, ${fmtKwh(soldKwh / daysElapsed)}/d</small></span>
-        <span class="ap-row-val">${fmt(soldDollars)}</span>
+      
+      <div class="${DAILY_EXPORT_EXCLUDE_KWH > 0 ? 'ap-fit-ctrl' : ''}" id="ap-fit-ctrl">
+        <div class="ap-row">
+          <span class="ap-row-lbl">Feed-in ${DAILY_EXPORT_EXCLUDE_KWH > 0 ? '<span class="ap-fit-chevron">▾</span>' : ''}<small>${fmtKwh(pageData.soldKwh)}, ${fmtKwh(pageData.soldKwh / daysElapsed)}/d</small></span>
+          <span class="ap-row-val">${fmt(pageData.soldDollars)}</span>
+        </div>
+        ${DAILY_EXPORT_EXCLUDE_KWH > 0 && pageData.soldDollars !== null ? `
+        <div class="ap-fit-adj" id="ap-fit-adj">
+          <div class="ap-row" style="opacity:0.6; font-size:10px; padding-top:0">
+            <span class="ap-row-lbl">Adjustment<small>${DAILY_EXPORT_EXCLUDE_KWH}kWh/d exclusion</small></span>
+            <span class="ap-row-val">-${fmt(pageData.soldDollars - soldDollars)}</span>
+          </div>
+        </div>
+        ` : ''}
       </div>
+
       <div class="ap-row">
-        <span class="ap-row-lbl">Gift card<small>${giftCardValue !== null ? getGiftCardTierRange(soldKwh) + ' tier' : '—'}</small></span>
+        <span class="ap-row-lbl">Gift card<small>${giftCardValue !== null ? getGiftCardTierRange(soldKwh) : '—'}</small></span>
         <span class="ap-row-val">${giftCardValue !== null ? '$' + giftCardValue + '.00' : 'N/A'}</span>
       </div>
       <div class="ap-divider"></div>
       <div class="ap-row ap-total">
-        <span class="ap-row-lbl">Total</span>
+        <span class="ap-row-lbl">Adjusted Total</span>
         <span class="ap-row-val">${fmt(totalRevenueDollars)}</span>
       </div>
     </div>
@@ -553,13 +577,16 @@
 
     // Show / hide body toggle
     const toggleBtn = panel.querySelector('.ap-toggle');
+    const hdrTitle = panel.querySelector('.ap-hdr-title');
     const body = panel.querySelector('.ap-body');
-    toggleBtn.addEventListener('click', () => {
+    const onToggle = () => {
       const hidden = body.style.display === 'none';
       body.style.display = hidden ? '' : 'none';
       toggleBtn.title = hidden ? 'Hide' : 'Show';
       toggleBtn.textContent = hidden ? '👁' : '🙈';
-    });
+    };
+    toggleBtn.addEventListener('click', onToggle);
+    hdrTitle.addEventListener('click', onToggle);
 
     // Collapse / expand tariff footer
     const footToggle = panel.querySelector('#ap-foot-toggle');
@@ -567,6 +594,14 @@
     footToggle.addEventListener('click', () => {
       foot.classList.toggle('open');
     });
+
+    // Collapse / expand FIT adjustment
+    const fitCtrl = panel.querySelector('#ap-fit-ctrl');
+    if (fitCtrl) {
+      fitCtrl.addEventListener('click', () => {
+        fitCtrl.classList.toggle('open');
+      });
+    }
 
     document.body.appendChild(panel);
   }
@@ -585,7 +620,8 @@
     if (days === null) warnings.push('Could not determine billing period — supply charge skipped.');
 
     // 2. Extract from DOM
-    const { boughtDollars, boughtKwh, soldDollars, soldKwh, daysLeft } = extractData();
+    const pageData = extractData();
+    let { boughtDollars, boughtKwh, soldDollars, soldKwh, daysLeft } = pageData;
 
     if (boughtDollars === null) warnings.push('"Electricity Bought From Grid" $ not found in page.');
     if (soldDollars === null) warnings.push('"Solar Electricity Sold to Grid" $ not found in page.');
@@ -602,7 +638,17 @@
       ? Math.max(1, days - daysLeft)
       : null;
 
-    // 4. Current period calculations
+    // 4. Usage Adjustments (Exclude non-eligible/external components)
+    if (daysElapsed !== null) {
+      if (soldKwh !== null && DAILY_EXPORT_EXCLUDE_KWH > 0) {
+        const excludeKwh = daysElapsed * DAILY_EXPORT_EXCLUDE_KWH;
+        const excludeDollars = (excludeKwh * SOLAR_FIT_CENTS_PER_KWH) / 100;
+        soldKwh = Math.max(0, soldKwh - excludeKwh);
+        if (soldDollars !== null) soldDollars = Math.max(0, soldDollars - excludeDollars);
+      }
+    }
+
+    // 5. Current period calculations
     const supplyChargeDollars = daysElapsed !== null
       ? parseFloat(((daysElapsed * SUPPLY_CHARGE_CENTS_PER_DAY) / 100).toFixed(2))
       : null;
@@ -679,6 +725,7 @@
       fcstTotalRevenueDollars,
       fcstNetCostDollars,
       warnings,
+      pageData,
     });
   }
 
