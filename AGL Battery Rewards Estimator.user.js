@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGL Battery Rewards Estimator
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Calculates electricity cost, FiT revenue, and net cost from AGL usage page
 // @author       jia11-501ng
 // @match        https://myaccount.agl.com.au/*
