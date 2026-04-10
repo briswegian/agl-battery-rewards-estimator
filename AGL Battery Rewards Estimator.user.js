@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGL Battery Rewards Estimator
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Calculates electricity cost, FiT revenue, and net cost from AGL usage page
 // @author       jia11-501ng
 // @match        https://myaccount.agl.com.au/*
@@ -250,6 +250,8 @@
       fcstGiftCardValue,
       fcstTotalRevenueDollars,
       fcstNetCostDollars,
+      fcstRawSoldKwh,
+      fcstRawFeedInDollars,
       warnings,
       pageData,
     } = data;
@@ -450,24 +452,24 @@
     <div class="ap-pane">
       <div class="ap-pane-title">☀️ Revenue</div>
       
-      <div class="${DAILY_EXPORT_EXCLUDE_KWH > 0 ? 'ap-fit-ctrl' : ''}" id="ap-fit-ctrl">
+      <div class="ap-row">
+        <span class="ap-row-lbl">Feed-in<small>${fmtKwh(pageData.soldKwh)}, ${fmtKwh(pageData.soldKwh / daysElapsed)}/d</small></span>
+        <span class="ap-row-val">${fmt(pageData.soldDollars)}</span>
+      </div>
+
+      <div class="${DAILY_EXPORT_EXCLUDE_KWH > 0 ? 'ap-fit-ctrl' : ''}" id="ap-gc-ctrl">
         <div class="ap-row">
-          <span class="ap-row-lbl">Feed-in ${DAILY_EXPORT_EXCLUDE_KWH > 0 ? '<span class="ap-fit-chevron">▾</span>' : ''}<small>${fmtKwh(pageData.soldKwh)}, ${fmtKwh(pageData.soldKwh / daysElapsed)}/d</small></span>
-          <span class="ap-row-val">${fmt(pageData.soldDollars)}</span>
+          <span class="ap-row-lbl">Gift card ${DAILY_EXPORT_EXCLUDE_KWH > 0 ? '<span class="ap-fit-chevron">▾</span>' : ''}<small>${giftCardValue !== null ? getGiftCardTierRange(soldKwh) : '—'}</small></span>
+          <span class="ap-row-val">${giftCardValue !== null ? '$' + giftCardValue + '.00' : 'N/A'}</span>
         </div>
-        ${DAILY_EXPORT_EXCLUDE_KWH > 0 && pageData.soldDollars !== null ? `
-        <div class="ap-fit-adj" id="ap-fit-adj">
+        ${DAILY_EXPORT_EXCLUDE_KWH > 0 && daysElapsed !== null ? `
+        <div class="ap-fit-adj" id="ap-gc-adj">
           <div class="ap-row" style="opacity:0.6; font-size:10px; padding-top:0">
-            <span class="ap-row-lbl">Adjustment<small>${DAILY_EXPORT_EXCLUDE_KWH}kWh/d exclusion</small></span>
-            <span class="ap-row-val">-${fmt(pageData.soldDollars - soldDollars)}</span>
+            <span class="ap-row-lbl">Excluded<small>${DAILY_EXPORT_EXCLUDE_KWH} kWh/d adjustment</small></span>
+            <span class="ap-row-val">-${(daysElapsed * DAILY_EXPORT_EXCLUDE_KWH).toFixed(1)} kWh</span>
           </div>
         </div>
         ` : ''}
-      </div>
-
-      <div class="ap-row">
-        <span class="ap-row-lbl">Gift card<small>${giftCardValue !== null ? getGiftCardTierRange(soldKwh) : '—'}</small></span>
-        <span class="ap-row-val">${giftCardValue !== null ? '$' + giftCardValue + '.00' : 'N/A'}</span>
       </div>
       <div class="ap-divider"></div>
       <div class="ap-row ap-total">
@@ -518,17 +520,30 @@
 
       <div class="ap-pane">
         <div class="ap-pane-title">Proj. Revenue</div>
+        
         <div class="ap-row">
-          <span class="ap-row-lbl">Feed-in<small>${fcstSoldKwh ? fmtKwh(fcstSoldKwh) : '—'}</small></span>
-          <span class="ap-row-val">${fmt(fcstFeedInDollars)}</span>
+          <span class="ap-row-lbl">Feed-in<small>${fcstRawSoldKwh ? fmtKwh(fcstRawSoldKwh) : '—'}</small></span>
+          <span class="ap-row-val">${fmt(fcstRawFeedInDollars)}</span>
         </div>
-        <div class="ap-row">
-          <span class="ap-row-lbl">Gift card<small>${fcstGiftCardValue !== null ? getGiftCardTierRange(fcstSoldKwh) + ' tier' : '—'}</small></span>
-          <span class="ap-row-val">${fcstGiftCardValue !== null ? '$' + fcstGiftCardValue + '.00' : 'N/A'}</span>
+
+        <div class="${DAILY_EXPORT_EXCLUDE_KWH > 0 ? 'ap-fit-ctrl' : ''}" id="ap-gc-fcst-ctrl">
+          <div class="ap-row">
+            <span class="ap-row-lbl">Gift card ${DAILY_EXPORT_EXCLUDE_KWH > 0 ? '<span class="ap-fit-chevron">▾</span>' : ''}<small>${fcstGiftCardValue !== null ? getGiftCardTierRange(fcstSoldKwh) + ' tier' : '—'}</small></span>
+            <span class="ap-row-val">${fcstGiftCardValue !== null ? '$' + fcstGiftCardValue + '.00' : 'N/A'}</span>
+          </div>
+          ${DAILY_EXPORT_EXCLUDE_KWH > 0 && fcstRawSoldKwh !== null ? `
+          <div class="ap-fit-adj" id="ap-gc-fcst-adj">
+            <div class="ap-row" style="opacity:0.6; font-size:10px; padding-top:0">
+              <span class="ap-row-lbl">Excluded<small>${DAILY_EXPORT_EXCLUDE_KWH} kWh/d adjustment</small></span>
+              <span class="ap-row-val">-${(days * DAILY_EXPORT_EXCLUDE_KWH).toFixed(1)} kWh</span>
+            </div>
+          </div>
+          ` : ''}
         </div>
+
         <div class="ap-divider"></div>
         <div class="ap-row ap-total">
-          <span class="ap-row-lbl">Total</span>
+          <span class="ap-row-lbl">Adjusted Total</span>
           <span class="ap-row-val">${fmt(fcstTotalRevenueDollars)}</span>
         </div>
       </div>
@@ -595,11 +610,18 @@
       foot.classList.toggle('open');
     });
 
-    // Collapse / expand FIT adjustment
-    const fitCtrl = panel.querySelector('#ap-fit-ctrl');
-    if (fitCtrl) {
-      fitCtrl.addEventListener('click', () => {
-        fitCtrl.classList.toggle('open');
+    // Collapse / expand Gift Card adjustment
+    const gcCtrl = panel.querySelector('#ap-gc-ctrl');
+    if (gcCtrl) {
+      gcCtrl.addEventListener('click', () => {
+        gcCtrl.classList.toggle('open');
+      });
+    }
+
+    const gcFcstCtrl = panel.querySelector('#ap-gc-fcst-ctrl');
+    if (gcFcstCtrl) {
+      gcFcstCtrl.addEventListener('click', () => {
+        gcFcstCtrl.classList.toggle('open');
       });
     }
 
@@ -638,13 +660,13 @@
       ? Math.max(1, days - daysLeft)
       : null;
 
-    // 4. Usage Adjustments (Exclude non-eligible/external components)
+    // 4. Usage Adjustments (Exclude non-eligible/external components for Gift Card Tier)
     if (daysElapsed !== null) {
       if (soldKwh !== null && DAILY_EXPORT_EXCLUDE_KWH > 0) {
         const excludeKwh = daysElapsed * DAILY_EXPORT_EXCLUDE_KWH;
-        const excludeDollars = (excludeKwh * SOLAR_FIT_CENTS_PER_KWH) / 100;
+        // Adjust kWh for gift card tier calculation
         soldKwh = Math.max(0, soldKwh - excludeKwh);
-        if (soldDollars !== null) soldDollars = Math.max(0, soldDollars - excludeDollars);
+        // Note: soldDollars (FiT revenue) remains raw because all export earns 3c/kWh
       }
     }
 
@@ -677,28 +699,38 @@
     let fcstGiftCardValue = null;
     let fcstTotalRevenueDollars = null;
     let fcstNetCostDollars = null;
+    let fcstRawSoldKwh = null;
+    let fcstRawFeedInDollars = null;
 
     if (daysElapsed !== null && days !== null) {
-      // Daily rates from what we've seen so far
+      // Daily raw rates (before adjustment)
+      const dailyRawSoldKwh = pageData.soldKwh !== null ? pageData.soldKwh / daysElapsed : null;
+      const dailyRawFeedInDollars = pageData.soldDollars !== null ? pageData.soldDollars / daysElapsed : null;
       const dailyBoughtDollars = boughtDollars !== null ? boughtDollars / daysElapsed : null;
-      const dailySoldKwh = soldKwh !== null ? soldKwh / daysElapsed : null;
-      const dailyFeedInDollars = soldDollars !== null ? soldDollars / daysElapsed : null;
 
-      // Projected full-period totals
-      fcstBoughtDollars = dailyBoughtDollars !== null
-        ? parseFloat((dailyBoughtDollars * days).toFixed(2)) : null;
+      // Projected raw totals
+      fcstRawSoldKwh = dailyRawSoldKwh !== null ? parseFloat((dailyRawSoldKwh * days).toFixed(2)) : null;
+      fcstRawFeedInDollars = dailyRawFeedInDollars !== null ? parseFloat((dailyRawFeedInDollars * days).toFixed(2)) : null;
+
+      // Forecast Adjustments
+      const fcstExcludeKwh = days * DAILY_EXPORT_EXCLUDE_KWH;
+      const fcstExcludeDollars = (fcstExcludeKwh * SOLAR_FIT_CENTS_PER_KWH) / 100;
+
+      fcstSoldKwh = fcstRawSoldKwh !== null ? Math.max(0, fcstRawSoldKwh - fcstExcludeKwh) : null;
+      fcstFeedInDollars = fcstRawFeedInDollars; // All export earns 3c/kWh
+
+      // Projected Costs
+      fcstBoughtDollars = dailyBoughtDollars !== null ? parseFloat((dailyBoughtDollars * days).toFixed(2)) : null;
       fcstSupplyDollars = parseFloat(((days * SUPPLY_CHARGE_CENTS_PER_DAY) / 100).toFixed(2));
-      fcstTotalCostDollars = (fcstBoughtDollars !== null)
-        ? parseFloat((fcstBoughtDollars + fcstSupplyDollars).toFixed(2)) : null;
+      fcstTotalCostDollars = (fcstBoughtDollars !== null) ? parseFloat((fcstBoughtDollars + fcstSupplyDollars).toFixed(2)) : null;
 
-      fcstSoldKwh = dailySoldKwh !== null
-        ? parseFloat((dailySoldKwh * days).toFixed(2)) : null;
-      fcstFeedInDollars = dailyFeedInDollars !== null
-        ? parseFloat((dailyFeedInDollars * days).toFixed(2)) : null;
+      // Projected Revenue
       fcstGiftCardValue = fcstSoldKwh !== null ? getGiftCardTier(fcstSoldKwh) : null;
-
       fcstTotalRevenueDollars = (fcstFeedInDollars !== null)
-        ? parseFloat(((fcstFeedInDollars ?? 0) + (fcstGiftCardValue ?? 0)).toFixed(2)) : null;
+        ? parseFloat(((fcstFeedInDollars ?? 0) + (fcstGiftCardValue ?? 0)).toFixed(2))
+        : (fcstGiftCardValue !== null ? fcstGiftCardValue : null);
+
+      // Projected Net
       fcstNetCostDollars = (fcstTotalCostDollars !== null && fcstTotalRevenueDollars !== null)
         ? parseFloat((fcstTotalCostDollars - fcstTotalRevenueDollars).toFixed(2)) : null;
     }
@@ -724,6 +756,8 @@
       fcstGiftCardValue,
       fcstTotalRevenueDollars,
       fcstNetCostDollars,
+      fcstRawSoldKwh,
+      fcstRawFeedInDollars,
       warnings,
       pageData,
     });
